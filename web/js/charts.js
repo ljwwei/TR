@@ -471,7 +471,15 @@ export function renderHeatmapChart(regionHourMatrix) {
   const mobile = isMobileViewport();
 
   const hours = [];
-  for (let h = 5; h <= 23; h++) hours.push(h);
+  for (let h = 0; h <= 23; h++) {
+    const hasEarly =
+      h >= 5 ||
+      REGION_ORDER.some((reg) => {
+        const cell = regionHourMatrix?.[reg]?.[h];
+        return cell && cell[0] > 0;
+      });
+    if (hasEarly) hours.push(h);
+  }
 
   const data = [];
   let maxAvg = 4;
@@ -631,12 +639,13 @@ export function renderStationDrilldownCharts(stStats, standard) {
     const hrs = [];
     const rates = [];
     const avgs = [];
-    for (let h = 5; h <= 23; h++) {
+    for (let h = 0; h <= 23; h++) {
       const tup = stStats.hourly?.[h] || [0, 0, 0, 0];
       const [tot, o0, o5, dsum] = tup;
+      if (h < 5 && tot === 0) continue;
       hrs.push(`${String(h).padStart(2, "0")}時`);
       rates.push(tot > 0 ? Number((((standard === "strict" ? o0 : o5) / tot) * 100).toFixed(1)) : null);
-      avgs.push(tot > 0 ? Number((dsum / tot).toFixed(1)) : 0);
+      avgs.push(tot > 0 ? Number((dsum / tot).toFixed(1)) : null);
     }
     cHourly.setOption(
       {

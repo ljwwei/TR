@@ -426,13 +426,13 @@
       <div class="modal-body prose-body">
         <h3>1. 為什麼多人瀏覽不會增加 TDX API 讀取次數？</h3>
         <p>
-          本專案將資料「採集」與「瀏覽」完全解耦：由 <strong>GitHub Actions</strong> 在每日 05:05–23:35 每 30 分鐘執行一次 Python 腳本呼叫 TDX v3 <code>StationLiveBoard</code> API（單次壓縮請求即涵蓋全臺車站），去重彙整為單日／單月／單年靜態 JSON 檔存入 <code>tdx-data</code> 分支並部署至 GitHub Pages。所有訪客僅從 CDN 讀取靜態檔，對 TDX 的額外消耗永遠為 <strong>0</strong>。
+          本專案將資料「採集」與「瀏覽」完全解耦：由 <strong>GitHub Actions</strong> 全天候 24 小時每 30 分鐘（含跨夜班次、深夜末班車與清晨首班車）執行一次 Python 腳本呼叫 TDX v3 <code>StationLiveBoard</code> API（單次壓縮請求即涵蓋全臺車站），去重彙整為單日／單月／單年靜態 JSON 檔存入 <code>tdx-data</code> 分支並部署至 GitHub Pages。所有訪客僅從 CDN 讀取靜態檔，對 TDX 的額外消耗永遠為 <strong>0</strong>。
         </p>
         <h3>2. 基礎會員（免費 3 點／月）額度估算</h3>
         <ul>
-          <li>每日 38 次呼叫 × 30 天 ≈ <strong>1,140 次／月</strong>（約 0.76 點，遠低於 4,500 次上限）。</li>
-          <li>開啟 OData <code>$select</code> 與 Gzip 壓縮，全臺 240+ 站每月流量約 130–180 MB（約 0.9–1.2 點）；總計約 <strong>1.6–1.9 點／月</strong>，內建 <code>2.75 點</code> 自動熔斷保護。</li>
-          <li>若將 GitHub Repository Variable <code>COLLECT_SCOPE</code> 設為 <code>major</code>（僅本島 19 縣市主要車站），更可降至 <strong>~0.9 點／月</strong>。</li>
+          <li>全天候 24 小時每 30 分鐘採集：每日 48 次 × 30 天 = <strong>1,440 次／月</strong>（僅約 0.96 點，遠低於 4,500 次上限）。</li>
+          <li>開啟 Gzip 壓縮傳輸，全臺 245 站每月流量約 110–170 MB（約 0.7–1.1 點）；合計約 <strong>1.7 – 2.1 點／月</strong>，內建 <code>2.75 點</code> 自動熔斷保護。</li>
+          <li>若將 GitHub Repository Variable <code>COLLECT_SCOPE</code> 設為 <code>major</code>（僅本島 19 縣市主要車站），更可降至 <strong>~1.1 點／月</strong>。</li>
         </ul>
         <h3>3. 兩種準點標準說明</h3>
         <ul>

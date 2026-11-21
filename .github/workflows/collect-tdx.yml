@@ -2,9 +2,9 @@ name: Collect TDX TRA Punctuality Data
 
 on:
   schedule:
-    # 台灣時間 05:05 ~ 23:35 每 30 分鐘執行一次（UTC 21:05-23:35 & 00:05-15:35）
-    # 避開深夜無車時段，全月約 1,140 次 API 呼叫，控制在基礎會員免費 3 點額度內
-    - cron: "5,35 21-23,0-15 * * *"
+    # 全天候 24 小時每 30 分鐘採集一次（涵蓋深夜末班車、跨日／跨夜班次、清晨首班車與嚴重誤點列車）
+    # 每日 48 次 × 30 天 = 1,440 次/月（約 0.96 點呼叫 + 流量合計約 1.6~2.1 點，仍在基礎會員免費 3 點內）
+    - cron: "5,35 * * * *"
   workflow_dispatch:
     inputs:
       scope:
@@ -29,7 +29,7 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     outputs:
-      updated: ${{ steps.commit.outputs.updated }}
+      deploy: ${{ steps.commit.outputs.deploy }}
     steps:
       - name: Checkout collector scripts (main)
         uses: actions/checkout@v4
@@ -72,17 +72,21 @@ jobs:
           cd data_repo
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
+            if git diff --cached --name-only | grep -Eq '^(daily/|monthly/|yearly/|stations\.json)'; then
+              echo "deploy=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+            fi
             git commit -m "chore(data): update TDX TRA snapshot $(date -u +'%Y-%m-%d %H:%M UTC')"
             git push origin tdx-data
-            echo "updated=true" >> "$GITHUB_OUTPUT"
           else
             echo "No data changes detected."
-            echo "updated=false" >> "$GITHUB_OUTPUT"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
     needs: collect
-    if: needs.collect.outputs.updated == 'true'
+    if: needs.collect.outputs.deploy == 'true'
     uses: ./.github/workflows/deploy-pages.yml
     permissions:
       contents: read

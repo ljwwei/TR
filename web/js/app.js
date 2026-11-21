@@ -137,7 +137,7 @@ function syncSourceUI() {
       banner.innerHTML = `
         <div>
           <strong>TDX 真實即時採集已成功連線！</strong>
-          已自動同步全臺 <strong>${manifest?.station_count || 245}</strong> 座車站，目前剛開始累積第 ${totalDays} 天即時數據；系統每 30 分鐘（05:05–23:35）自動更新並累計單日／單月／單年統計。
+          已自動同步全臺 <strong>${manifest?.station_count || 245}</strong> 座車站，目前剛開始累積第 ${totalDays} 天即時數據；系統全天候 24 小時每 30 分鐘（含跨夜班次）自動更新並累計單日／單月／單年統計。
         </div>
         <button type="button" class="notice-action" id="btnBannerPreviewDemo">預覽完整年度示範</button>
       `;
@@ -487,8 +487,8 @@ function renderTrendSection(scopeBlock) {
 
   if (state.granularity === "daily") {
     titleEl.textContent = "單日 24 小時各時段準誤點曲線";
-    descEl.textContent = "觀察早晚尖峰時段（07–09、17–19 時）準點率下降與平均延誤變化";
-    hintEl.textContent = "時段分析（05:00 – 23:59）";
+    descEl.textContent = "觀察全天候各時段（含深夜跨日班次與早晚尖峰）準點率與平均延誤變化";
+    hintEl.textContent = "24 小時全時段分析（含跨夜班次）";
   } else if (state.granularity === "monthly") {
     titleEl.textContent = "單月每日準誤點趨勢分析";
     descEl.textContent = "追蹤整月波動與異常高峰日期；點擊任意日期資料點可直接下鑽單日分析";
