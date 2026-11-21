@@ -26,6 +26,7 @@ import json
 import math
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -90,6 +91,33 @@ def delay_bucket_index(delay: int) -> int:
     return 4
 
 
+def urlopen_with_retry(req: urllib.request.Request, timeout: int = 45, max_attempts: int = 3) -> tuple[bytes, dict]:
+    """對短暫網路抖動或 429/5xx 錯誤進行指數退避重試，提升 GitHub Actions 排程穩定度。"""
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                headers = {k.lower(): v for k, v in resp.headers.items()}
+                return resp.read(), headers
+        except urllib.error.HTTPError as e:
+            last_exc = e
+            if e.code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+                wait_s = 2 * attempt + 1
+                print(f"[WARN] TDX HTTP {e.code}，{wait_s} 秒後進行第 {attempt + 1} 次重試…")
+                time.sleep(wait_s)
+                continue
+            raise
+        except Exception as e:
+            last_exc = e
+            if attempt < max_attempts:
+                wait_s = 2 * attempt + 1
+                print(f"[WARN] 連線異常（{e}），{wait_s} 秒後進行第 {attempt + 1} 次重試…")
+                time.sleep(wait_s)
+                continue
+            raise
+    raise RuntimeError(f"TDX 請求重試耗盡: {last_exc}")
+
+
 def get_tdx_token(client_id: str, client_secret: str) -> str:
     body = urllib.parse.urlencode(
         {
@@ -107,12 +135,12 @@ def get_tdx_token(client_id: str, client_secret: str) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-        token = payload.get("access_token")
-        if not token:
-            raise RuntimeError(f"TDX OAuth 回傳缺少 access_token: {payload}")
-        return token
+    raw, _ = urlopen_with_retry(req, timeout=30)
+    payload = json.loads(raw.decode("utf-8"))
+    token = payload.get("access_token")
+    if not token:
+        raise RuntimeError(f"TDX OAuth 回傳缺少 access_token: {payload}")
+    return token
 
 
 def tdx_get_json(url: str, token: str) -> tuple[object, int]:
@@ -127,14 +155,13 @@ def tdx_get_json(url: str, token: str) -> tuple[object, int]:
         },
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=45) as resp:
-        raw = resp.read()
-        encoding = (resp.headers.get("Content-Encoding") or "").lower()
-        if encoding == "gzip" or raw[:2] == b"\x1f\x8b":
-            data_bytes = gzip.decompress(raw)
-        else:
-            data_bytes = raw
-        return json.loads(data_bytes.decode("utf-8")), len(data_bytes)
+    raw, headers = urlopen_with_retry(req, timeout=45)
+    encoding = (headers.get("content-encoding") or "").lower()
+    if encoding == "gzip" or raw[:2] == b"\x1f\x8b":
+        data_bytes = gzip.decompress(raw)
+    else:
+        data_bytes = raw
+    return json.loads(data_bytes.decode("utf-8")), len(data_bytes)
 
 
 def extract_zh(obj, fallback: str = "") -> str:

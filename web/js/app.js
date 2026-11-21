@@ -5,6 +5,7 @@
  */
 
 import {
+  isMobileViewport,
   renderDelayDistChart,
   renderHeatmapChart,
   renderRegionsChart,
@@ -15,6 +16,7 @@ import {
   resizeAllCharts,
 } from "./charts.js";
 import {
+  BUCKET_COLORS,
   BUCKET_LABELS,
   buildCommuterInsights,
   calcAvgDelay,
@@ -53,6 +55,8 @@ const state = {
   prevDoc: null,
   activeStationRows: [],
   openStationId: null,
+  mapRoamEnabled: false,
+  lastIsMobile: window.innerWidth <= 768,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -313,7 +317,9 @@ function renderAll() {
   renderTables(rows, scopeBlock.top_delays || []);
 
   // Charts
-  renderTaiwanMap(rows, state.standard, openStationModal);
+  syncMapToolsUI();
+  const effectiveRoam = isMobileViewport() ? state.mapRoamEnabled : true;
+  renderTaiwanMap(rows, state.standard, openStationModal, effectiveRoam);
   renderTrendSection(scopeBlock);
   renderDelayDistChart(scopeBlock.summary);
   renderTrainTypesChart(scopeBlock.train_types, state.standard);
@@ -323,6 +329,15 @@ function renderAll() {
   if (state.openStationId) {
     renderStationModalContent(state.openStationId);
   }
+}
+
+function syncMapToolsUI() {
+  const roamBtn = $("btnMapRoam");
+  if (!roamBtn) return;
+  const mobile = isMobileViewport();
+  roamBtn.classList.toggle("hidden", !mobile);
+  roamBtn.classList.toggle("active", state.mapRoamEnabled);
+  roamBtn.textContent = state.mapRoamEnabled ? "鎖定捲動" : "啟用縮放";
 }
 
 function renderHeaderMeta(doc, scopeBlock, rows) {
@@ -499,9 +514,9 @@ function renderBucketPills(summary) {
   const buckets = summary?.buckets || [0, 0, 0, 0, 0];
   const total = summary?.total || 1;
   $("delayBucketPills").innerHTML = BUCKET_LABELS.map((lbl, idx) => {
-    const pct = ((buckets[idx] / total) * 100).toFixed(1);
+    const pct = summary?.total ? ((buckets[idx] / total) * 100).toFixed(1) : "0.0";
     return `
-      <div class="bucket-pill">
+      <div class="bucket-pill" style="--bucket-color:${BUCKET_COLORS[idx]}">
         <span class="bucket-pill-label">${lbl}</span>
         <span class="bucket-pill-val">${pct}%</span>
       </div>
@@ -828,7 +843,31 @@ function bindEvents() {
     }
   });
 
-  window.addEventListener("resize", resizeAllCharts);
+  // Map tools (mobile scroll-lock toggle & reset view)
+  $("btnMapRoam").addEventListener("click", () => {
+    state.mapRoamEnabled = !state.mapRoamEnabled;
+    syncMapToolsUI();
+    renderTaiwanMap(state.activeStationRows, state.standard, openStationModal, state.mapRoamEnabled);
+  });
+
+  $("btnResetMap").addEventListener("click", () => {
+    const effectiveRoam = isMobileViewport() ? state.mapRoamEnabled : true;
+    renderTaiwanMap(state.activeStationRows, state.standard, openStationModal, effectiveRoam);
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const nowMobile = isMobileViewport();
+      if (nowMobile !== state.lastIsMobile) {
+        state.lastIsMobile = nowMobile;
+        renderAll();
+      } else {
+        resizeAllCharts();
+      }
+    }, 120);
+  });
 }
 
 // 確保 defer 的 ECharts 載入完畢後啟動

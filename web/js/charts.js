@@ -25,6 +25,10 @@ import {
 let mapRegistered = false;
 const chartRegistry = new Map();
 
+export function isMobileViewport() {
+  return window.innerWidth <= 768;
+}
+
 function getThemeColors() {
   const dark = document.documentElement.getAttribute("data-theme") === "dark";
   return {
@@ -65,19 +69,21 @@ export function resizeAllCharts() {
   }
 }
 
-export function renderTaiwanMap(stationRows, standard, onStationClick) {
+export function renderTaiwanMap(stationRows, standard, onStationClick, mapRoam = null) {
   const chart = getOrInitChart("chartTaiwanMap");
   if (!chart) return;
   const tc = getThemeColors();
+  const mobile = isMobileViewport();
+  const allowRoam = mapRoam !== null ? mapRoam : !mobile;
 
   const validRows = stationRows.filter((s) => Number.isFinite(s.lon) && Number.isFinite(s.lat));
   const maxTotal = Math.max(1, ...validRows.map((s) => s.total));
 
   const scatterData = validRows.map((s) => {
     const rate = standard === "strict" ? s.rate0 : s.rate5;
-    const size = s.isMajor
-      ? 11 + Math.sqrt(s.total / maxTotal) * 14
-      : 7 + Math.sqrt(s.total / maxTotal) * 9;
+    const baseSize = mobile ? (s.isMajor ? 9 : 6) : (s.isMajor ? 11 : 7);
+    const scaleSize = mobile ? (s.isMajor ? 10 : 7) : (s.isMajor ? 14 : 9);
+    const size = baseSize + Math.sqrt(s.total / maxTotal) * scaleSize;
     return {
       name: s.name,
       stationId: s.id,
@@ -87,16 +93,16 @@ export function renderTaiwanMap(stationRows, standard, onStationClick) {
         color: getRateColor(rate, standard),
         borderColor: tc.dark ? "#0B1220" : "#FFFFFF",
         borderWidth: s.isMajor ? 2 : 1.2,
-        shadowBlur: s.isMajor ? 8 : 3,
+        shadowBlur: s.isMajor ? 7 : 3,
         shadowColor: "rgba(15, 23, 42, 0.28)",
       },
       label: {
-        show: s.isMajor && validRows.length <= 25,
+        show: s.isMajor && validRows.length <= 25 && (!mobile || ["1000", "3300", "4220", "4400", "7000", "6000", "7190", "1210", "4080"].includes(s.id)),
         formatter: s.name,
         position: s.lon > 121.35 && s.lat < 24.9 ? "right" : s.lat > 25.06 ? "top" : "left",
-        distance: 6,
+        distance: mobile ? 4 : 6,
         color: tc.text,
-        fontSize: 11,
+        fontSize: mobile ? 10 : 11,
         fontWeight: 600,
         backgroundColor: tc.dark ? "rgba(16, 27, 46, 0.78)" : "rgba(255, 255, 255, 0.84)",
         padding: [2, 4],
@@ -110,6 +116,7 @@ export function renderTaiwanMap(stationRows, standard, onStationClick) {
     {
       tooltip: {
         trigger: "item",
+        confine: true,
         backgroundColor: tc.tooltipBg,
         borderColor: tc.tooltipBorder,
         textStyle: { color: tc.text, fontFamily: "Noto Sans TC, sans-serif", fontSize: 12 },
@@ -133,8 +140,8 @@ export function renderTaiwanMap(stationRows, standard, onStationClick) {
       },
       geo: {
         map: "taiwan_main",
-        roam: true,
-        zoom: 1.16,
+        roam: allowRoam,
+        zoom: mobile ? 1.12 : 1.18,
         center: [120.96, 23.62],
         scaleLimit: { min: 0.9, max: 5 },
         itemStyle: {
@@ -157,7 +164,7 @@ export function renderTaiwanMap(stationRows, standard, onStationClick) {
           zlevel: 1,
           lineStyle: {
             color: tc.railLine,
-            width: 2.2,
+            width: mobile ? 1.8 : 2.2,
             type: "solid",
           },
           data: TRA_RAIL_CORRIDORS,
@@ -190,8 +197,9 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
   const chart = getOrInitChart("chartTrend");
   if (!chart) return;
   const tc = getThemeColors();
+  const mobile = isMobileViewport();
 
-  const labels = trend.map((t) => t.label);
+  const labels = trend.map((t) => (mobile ? t.label.replace("時", "") : t.label));
   const rates = trend.map((t) => (t.total > 0 ? Number(calcOntimeRate(t, standard).toFixed(2)) : null));
   const avgDelays = trend.map((t) => (t.total > 0 ? Number(calcAvgDelay(t).toFixed(2)) : null));
   const totals = trend.map((t) => t.total);
@@ -203,6 +211,7 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
     {
       tooltip: {
         trigger: "axis",
+        confine: true,
         backgroundColor: tc.tooltipBg,
         borderColor: tc.tooltipBorder,
         textStyle: { color: tc.text, fontSize: 12 },
@@ -233,32 +242,32 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
       },
       legend: {
         top: 0,
-        right: 8,
-        textStyle: { color: tc.muted, fontSize: 12 },
+        right: mobile ? "center" : 8,
+        textStyle: { color: tc.muted, fontSize: mobile ? 11 : 12 },
       },
-      grid: { left: 52, right: 56, top: 40, bottom: 32 },
+      grid: { left: mobile ? 42 : 54, right: mobile ? 36 : 56, top: mobile ? 42 : 40, bottom: 28 },
       xAxis: {
         type: "category",
         data: labels,
         axisLine: { lineStyle: { color: tc.gridLine } },
-        axisLabel: { color: tc.muted, fontSize: 11 },
+        axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, hideOverlap: true },
       },
       yAxis: [
         {
           type: "value",
-          name: "準點率 (%)",
+          name: mobile ? "%" : "準點率 (%)",
           min: minRate,
           max: 100,
           nameTextStyle: { color: tc.muted, fontSize: 11 },
-          axisLabel: { color: tc.muted, formatter: "{value}%" },
+          axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, formatter: "{value}%" },
           splitLine: { lineStyle: { color: tc.gridLine } },
         },
         {
           type: "value",
-          name: "平均誤點 (分)",
+          name: mobile ? "分" : "平均誤點 (分)",
           min: 0,
           nameTextStyle: { color: tc.muted, fontSize: 11 },
-          axisLabel: { color: tc.muted, formatter: "{value}分" },
+          axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, formatter: "{value}分" },
           splitLine: { show: false },
         },
       ],
@@ -309,6 +318,7 @@ export function renderDelayDistChart(summary) {
   const chart = getOrInitChart("chartDelayDist");
   if (!chart) return;
   const tc = getThemeColors();
+  const mobile = isMobileViewport();
   const buckets = summary?.buckets || [0, 0, 0, 0, 0];
   const total = summary?.total || 1;
 
@@ -322,12 +332,14 @@ export function renderDelayDistChart(summary) {
     {
       tooltip: {
         trigger: "item",
+        confine: true,
         backgroundColor: tc.tooltipBg,
         borderColor: tc.tooltipBorder,
         textStyle: { color: tc.text, fontSize: 12 },
         formatter: (p) => `<strong>${p.name}</strong><br/>班次數：${fmtNum(p.value)}（${((p.value / total) * 100).toFixed(1)}%）`,
       },
       legend: {
+        show: !mobile,
         orient: "vertical",
         right: 8,
         top: "middle",
@@ -337,8 +349,8 @@ export function renderDelayDistChart(summary) {
         {
           name: "誤點分佈",
           type: "pie",
-          radius: ["48%", "76%"],
-          center: ["36%", "50%"],
+          radius: mobile ? ["50%", "80%"] : ["48%", "76%"],
+          center: mobile ? ["50%", "50%"] : ["36%", "50%"],
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
@@ -367,6 +379,7 @@ export function renderTrainTypesChart(trainTypesObj, standard) {
   const chart = getOrInitChart("chartTrainTypes");
   if (!chart) return;
   const tc = getThemeColors();
+  const mobile = isMobileViewport();
 
   const entries = Object.entries(trainTypesObj || {})
     .filter(([, v]) => v.total > 0)
@@ -382,6 +395,7 @@ export function renderTrainTypesChart(trainTypesObj, standard) {
     {
       tooltip: {
         trigger: "axis",
+        confine: true,
         axisPointer: { type: "shadow" },
         backgroundColor: tc.tooltipBg,
         borderColor: tc.tooltipBorder,
@@ -400,26 +414,26 @@ export function renderTrainTypesChart(trainTypesObj, standard) {
           `;
         },
       },
-      legend: { top: 0, right: 6, textStyle: { color: tc.muted, fontSize: 12 } },
-      grid: { left: 48, right: 48, top: 36, bottom: 42 },
+      legend: { top: 0, right: mobile ? "center" : 6, textStyle: { color: tc.muted, fontSize: mobile ? 11 : 12 } },
+      grid: { left: mobile ? 40 : 48, right: mobile ? 36 : 48, top: 36, bottom: mobile ? 54 : 42 },
       xAxis: {
         type: "category",
         data: entries.map((e) => e.name),
         axisLine: { lineStyle: { color: tc.gridLine } },
-        axisLabel: { color: tc.muted, fontSize: 11, interval: 0, rotate: entries.length > 5 ? 18 : 0 },
+        axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, interval: 0, rotate: mobile ? 28 : (entries.length > 5 ? 18 : 0) },
       },
       yAxis: [
         {
           type: "value",
           min: 0,
           max: 100,
-          axisLabel: { color: tc.muted, formatter: "{value}%" },
+          axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, formatter: "{value}%" },
           splitLine: { lineStyle: { color: tc.gridLine } },
         },
         {
           type: "value",
           min: 0,
-          axisLabel: { color: tc.muted, formatter: "{value}分" },
+          axisLabel: { color: tc.muted, fontSize: mobile ? 10 : 11, formatter: "{value}分" },
           splitLine: { show: false },
         },
       ],
@@ -427,7 +441,7 @@ export function renderTrainTypesChart(trainTypesObj, standard) {
         {
           name: "準點率(%)",
           type: "bar",
-          barMaxWidth: 26,
+          barMaxWidth: mobile ? 20 : 26,
           itemStyle: {
             borderRadius: [6, 6, 0, 0],
             color: (params) => getRateColor(entries[params.dataIndex].rate, standard),
@@ -454,6 +468,7 @@ export function renderHeatmapChart(regionHourMatrix) {
   const chart = getOrInitChart("chartHeatmap");
   if (!chart) return;
   const tc = getThemeColors();
+  const mobile = isMobileViewport();
 
   const hours = [];
   for (let h = 5; h <= 23; h++) hours.push(h);
@@ -474,26 +489,28 @@ export function renderHeatmapChart(regionHourMatrix) {
     {
       tooltip: {
         position: "top",
+        confine: true,
         backgroundColor: tc.tooltipBg,
         borderColor: tc.tooltipBorder,
         textStyle: { color: tc.text, fontSize: 12 },
         formatter: (p) => {
           const [xIdx, yIdx, avg, cnt] = p.data;
+          if (!cnt) return `<strong>${REGION_ORDER[yIdx]}幹線・${String(hours[xIdx]).padStart(2, "0")}:00</strong><br/>尚無觀測班次`;
           return `<strong>${REGION_ORDER[yIdx]}幹線・${String(hours[xIdx]).padStart(2, "0")}:00</strong><br/>平均誤點：<strong>${avg.toFixed(1)} 分</strong><br/>統計班次：${fmtNum(cnt)} 班`;
         },
       },
-      grid: { left: 54, right: 16, top: 14, bottom: 52 },
+      grid: { left: mobile ? 42 : 54, right: mobile ? 8 : 16, top: 12, bottom: 52 },
       xAxis: {
         type: "category",
-        data: hours.map((h) => `${String(h).padStart(2, "0")}時`),
+        data: hours.map((h) => (mobile ? String(h).padStart(2, "0") : `${String(h).padStart(2, "0")}時`)),
         splitArea: { show: true },
-        axisLabel: { color: tc.muted, fontSize: 10 },
+        axisLabel: { color: tc.muted, fontSize: 10, interval: mobile ? 1 : 0 },
       },
       yAxis: {
         type: "category",
         data: REGION_ORDER,
         splitArea: { show: true },
-        axisLabel: { color: tc.text, fontWeight: 600, fontSize: 12 },
+        axisLabel: { color: tc.text, fontWeight: 600, fontSize: mobile ? 11 : 12 },
       },
       visualMap: {
         min: 0,
@@ -502,8 +519,8 @@ export function renderHeatmapChart(regionHourMatrix) {
         orient: "horizontal",
         left: "center",
         bottom: 0,
-        itemWidth: 12,
-        itemHeight: 110,
+        itemWidth: 11,
+        itemHeight: mobile ? 84 : 110,
         text: ["高延誤(分)", "低延誤"],
         textStyle: { color: tc.muted, fontSize: 11 },
         inRange: {
@@ -518,7 +535,7 @@ export function renderHeatmapChart(regionHourMatrix) {
           type: "heatmap",
           data,
           label: {
-            show: true,
+            show: !mobile,
             fontSize: 10,
             color: tc.dark ? "#F8FAFC" : "#0F172A",
             formatter: (p) => (p.data[3] > 0 ? p.data[2].toFixed(1) : ""),
