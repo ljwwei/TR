@@ -63,7 +63,8 @@ const $ = (id) => document.getElementById(id);
 
 async function fetchJsonSafe(url) {
   try {
-    const resp = await fetch(url, { cache: "no-cache" });
+    const mode = url.includes("manifest.json") ? "no-store" : "no-cache";
+    const resp = await fetch(url, { cache: mode });
     if (!resp.ok) return null;
     return await resp.json();
   } catch {
@@ -152,6 +153,27 @@ function syncSourceUI() {
       }
     } else {
       banner.className = "notice-banner notice-banner--live hidden";
+    }
+  } else if (state.manifests.live) {
+    badge.className = "status-pill status-pill--demo";
+    badge.textContent = "完整年度示範預覽（TDX 運作中）";
+    switchLabel.textContent = "返回 TDX 真實即時數據";
+    banner.className = "notice-banner notice-banner--demo";
+    banner.innerHTML = `
+      <div>
+        <strong>目前正在預覽「完整年度示範資料」：</strong>
+        您的 TDX API 已設定成功且自動採集正常運作中（最新真實更新：<strong>${formatIsoShort(state.manifests.live.generated_at)}</strong>，已同步全臺 ${state.manifests.live.station_count || 245} 站）。隨時可點右側按鈕切回真實數據。
+      </div>
+      <button type="button" class="notice-action" id="btnBannerBackLive">返回 TDX 真實即時數據</button>
+    `;
+    const btn = $("btnBannerBackLive");
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        state.source = "live";
+        syncSourceUI();
+        populatePeriodOptions();
+        await loadAndRenderCurrent();
+      });
     }
   } else {
     badge.className = "status-pill status-pill--demo";
