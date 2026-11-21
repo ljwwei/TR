@@ -1,0 +1,80 @@
+name: Deploy TRA Dashboard to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "scripts/generate_demo_data.py"
+      - "scripts/stations_catalog.py"
+      - "scripts/collect_tdx.py"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          path: site_repo
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Python scripts and ensure baseline demo dataset exists
+        run: |
+          python3 -m py_compile site_repo/scripts/*.py
+          if [ ! -f site_repo/web/data/demo/manifest.json ]; then
+            python3 site_repo/scripts/generate_demo_data.py
+          fi
+
+      - name: Checkout live TDX data branch (if available)
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: tdx-data
+          path: tdx_data
+          fetch-depth: 1
+
+      - name: Merge live TDX static snapshots into web bundle
+        run: |
+          if [ -f tdx_data/manifest.json ]; then
+            mkdir -p site_repo/web/data/live
+            cp -r tdx_data/daily tdx_data/monthly tdx_data/yearly tdx_data/manifest.json site_repo/web/data/live/ 2>/dev/null || true
+            if [ -f tdx_data/stations.json ]; then
+              cp tdx_data/stations.json site_repo/web/data/stations.json
+            fi
+            echo "Merged live TDX snapshots into deployment bundle."
+          else
+            echo "No live TDX branch yet; deploying with baseline demo dataset."
+          fi
+          touch site_repo/web/.nojekyll
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site_repo/web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

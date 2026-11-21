@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets & local env
+.env
+.env.local
+*.secret
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local test live data (live data lives in the tdx-data branch on GitHub)
+web/data/live/
+data_tmp/

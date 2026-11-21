@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台鐵準誤點分析統計儀表板 | TRA Punctuality Analytics</title>
+  <meta name="description" content="臺灣鐵路（台鐵 TRA）單日、單月、單年準誤點率與即時延誤統計視覺化分析網站，涵蓋本島 19 縣市主要車站與全臺車站，採用靜態快取架構不增加 TDX API 呼叫次數。" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" defer></script>
+</head>
+<body>
+  <!-- Top Header & Sticky Control Bar -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-block">
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="34" height="34" fill="none">
+            <rect width="64" height="64" rx="14" fill="currentColor" fill-opacity="0.16"/>
+            <path d="M18 16h28a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V22a6 6 0 0 1 6-6Z" stroke="#fff" stroke-width="3.2"/>
+            <rect x="18" y="21" width="28" height="12" rx="3" fill="#38BDF8" fill-opacity="0.3" stroke="#7DD3FC" stroke-width="2"/>
+            <circle cx="22" cy="40" r="3.2" fill="#34D399"/>
+            <circle cx="42" cy="40" r="3.2" fill="#FBBF24"/>
+            <path d="M22 48l-5 8M42 48l5 8M19 53h26" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-row">
+            <h1>台鐵準誤點分析統計</h1>
+            <span id="dataSourceBadge" class="status-pill status-pill--loading">載入資料中…</span>
+          </div>
+          <p class="brand-subtitle">TDX 運輸資料流通服務平臺・靜態快取零增耗架構</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnSourceSwitch" class="btn-ghost hidden" type="button" title="切換真實採集資料與示範展示資料">
+          <span id="sourceSwitchLabel">檢視示範資料</span>
+        </button>
+        <button id="btnExportCsv" class="btn-ghost" type="button" title="下載目前檢視期間之各站統計 CSV 報表">
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5M4 16h12" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>匯出 CSV</span>
+        </button>
+        <button id="btnAboutModal" class="btn-ghost" type="button" title="查看系統架構、準點標準與 TDX 省流設計">
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="10" cy="10" r="7.5"/>
+            <path d="M10 9v4.5M10 6.5h.01" stroke-linecap="round"/>
+          </svg>
+          <span>架構說明</span>
+        </button>
+        <button id="btnThemeToggle" class="btn-icon" type="button" aria-label="切換深淺色主題" title="切換深色／淺色模式">
+          <svg id="iconSun" class="hidden" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="10" cy="10" r="3.5"/>
+            <path d="M10 2v2m0 12v2M2 10h2m12 0h2M4.34 4.34l1.42 1.42m8.48 8.48l1.42 1.42M15.66 4.34l-1.42 1.42M5.76 14.24l-1.42 1.42" stroke-linecap="round"/>
+          </svg>
+          <svg id="iconMoon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M16.5 11.8A7 7 0 0 1 8.2 3.5a7 7 0 1 0 8.3 8.3Z" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter & Query Control Toolbar -->
+    <div class="toolbar-wrap">
+      <div class="toolbar-inner">
+        <!-- 1. Time Granularity (單日 / 單月 / 單年) -->
+        <div class="control-group">
+          <span class="control-label">統計區間</span>
+          <div class="segmented" role="tablist" aria-label="統計時間尺度">
+            <button type="button" class="seg-btn active" data-granularity="daily" role="tab" aria-selected="true">單日</button>
+            <button type="button" class="seg-btn" data-granularity="monthly" role="tab" aria-selected="false">單月</button>
+            <button type="button" class="seg-btn" data-granularity="yearly" role="tab" aria-selected="false">單年</button>
+          </div>
+          <div class="period-nav">
+            <button type="button" id="btnPrevPeriod" class="nav-arrow" aria-label="上一個區間" title="上一個區間">‹</button>
+            <select id="periodSelect" class="select-input" aria-label="選擇查詢日期或期間"></select>
+            <button type="button" id="btnNextPeriod" class="nav-arrow" aria-label="下一個區間" title="下一個區間">›</button>
+          </div>
+        </div>
+
+        <!-- 2. Station Scope (本島 19 縣市主站 / 全臺所有車站) -->
+        <div class="control-group">
+          <span class="control-label">涵蓋車站</span>
+          <div class="segmented" role="tablist" aria-label="車站涵蓋範圍">
+            <button type="button" class="seg-btn active" data-scope="major" role="tab" aria-selected="true">本島 19 縣市主站</button>
+            <button type="button" class="seg-btn" data-scope="all" role="tab" aria-selected="false">全台所有車站 <span id="allStationCount" class="count-chip"></span></button>
+          </div>
+        </div>
+
+        <!-- 3. Punctuality Standard (台鐵 ≤5分 / 嚴格 0分) -->
+        <div class="control-group">
+          <span class="control-label">準點標準</span>
+          <div class="segmented" role="tablist" aria-label="準點判定標準">
+            <button type="button" class="seg-btn active" data-standard="official" role="tab" aria-selected="true" title="依臺鐵官方標準：誤點 5 分鐘（含）以內視為準點">官方標準 ≤5分</button>
+            <button type="button" class="seg-btn" data-standard="strict" role="tab" aria-selected="false" title="嚴格零誤差標準：誤點 0 分鐘才視為準點">嚴格準點 0分</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- Notice Banner (Demo mode explanation or Live data info) -->
+    <section id="noticeBanner" class="notice-banner hidden" aria-live="polite"></section>
+
+    <!-- Smart Commuter Insights Strip -->
+    <section class="insights-strip" aria-label="關鍵營運洞察">
+      <div class="insights-header">
+        <span class="insights-title">
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 2.5a5.5 5.5 0 0 0-3 10.1V15a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-2.4a5.5 5.5 0 0 0-3-10.1ZM8 17.5h4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          本期通勤與營運洞察
+        </span>
+        <span id="periodMetaInfo" class="period-meta mono"></span>
+      </div>
+      <div id="insightsList" class="insights-grid"></div>
+    </section>
+
+    <!-- Executive KPI Cards -->
+    <section class="kpi-grid" aria-label="核心統計指標">
+      <article class="kpi-card kpi-card--primary">
+        <div class="kpi-top">
+          <span class="kpi-label" id="kpiOntimeLabel">整體準點率（≤ 5分）</span>
+          <span id="kpiOntimeDelta" class="delta-badge"></span>
+        </div>
+        <div class="kpi-value-row">
+          <span id="kpiOntimeRate" class="kpi-value mono">--.-%</span>
+          <span id="kpiOntimeGrade" class="grade-pill">--</span>
+        </div>
+        <div class="kpi-bar-track"><div id="kpiOntimeBar" class="kpi-bar-fill"></div></div>
+        <p id="kpiOntimeSub" class="kpi-sub">準點班次 / 總觀測班次</p>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">統計列車停靠次數</span>
+          <span id="kpiStationsCovered" class="kpi-tag">0 站</span>
+        </div>
+        <div class="kpi-value-row">
+          <span id="kpiTotalTrains" class="kpi-value mono">--</span>
+        </div>
+        <p id="kpiTotalSub" class="kpi-sub">跨站去重之車次觀測樣本</p>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">平均誤點時間</span>
+          <span id="kpiP90Badge" class="kpi-tag mono">P90 --分</span>
+        </div>
+        <div class="kpi-value-row">
+          <span id="kpiAvgDelay" class="kpi-value mono">--</span>
+          <span class="kpi-unit">分鐘</span>
+        </div>
+        <p id="kpiAvgDelaySub" class="kpi-sub">僅計誤點班次平均：-- 分</p>
+      </article>
+
+      <article class="kpi-card kpi-card--clickable" id="kpiBestCard" role="button" tabindex="0">
+        <div class="kpi-top">
+          <span class="kpi-label">準點最佳車站</span>
+          <span class="kpi-tag kpi-tag--good">TOP 1</span>
+        </div>
+        <div class="kpi-value-row">
+          <span id="kpiBestStation" class="kpi-value kpi-value--text">--</span>
+          <span id="kpiBestRate" class="kpi-highlight-good mono">--%</span>
+        </div>
+        <p id="kpiBestSub" class="kpi-sub">點擊檢視該站詳細分析 →</p>
+      </article>
+
+      <article class="kpi-card kpi-card--clickable" id="kpiWorstCard" role="button" tabindex="0">
+        <div class="kpi-top">
+          <span class="kpi-label">誤點熱點車站</span>
+          <span class="kpi-tag kpi-tag--warn">需留意</span>
+        </div>
+        <div class="kpi-value-row">
+          <span id="kpiWorstStation" class="kpi-value kpi-value--text">--</span>
+          <span id="kpiWorstDelay" class="kpi-highlight-bad mono">--分</span>
+        </div>
+        <p id="kpiWorstSub" class="kpi-sub">點擊檢視該站詳細分析 →</p>
+      </article>
+    </section>
+
+    <!-- Primary Grid: Taiwan Interactive Rail Map + Ranked County/Station Leaderboard -->
+    <section class="grid-map-rank">
+      <article class="panel panel--map">
+        <div class="panel-header">
+          <div>
+            <h2>台灣鐵路準誤點互動地圖</h2>
+            <p class="panel-desc">點擊任意車站節點可開啟單站深度分析（24 小時曲線、車種與方向對比）</p>
+          </div>
+          <div class="map-legend-inline">
+            <span class="legend-dot" style="--c:#059669"></span><span>≥92%</span>
+            <span class="legend-dot" style="--c:#D97706"></span><span>85–92%</span>
+            <span class="legend-dot" style="--c:#EA580C"></span><span>75–85%</span>
+            <span class="legend-dot" style="--c:#DC2626"></span><span>&lt;75%</span>
+          </div>
+        </div>
+        <div id="chartTaiwanMap" class="chart-box chart-box--tall"></div>
+      </article>
+
+      <article class="panel panel--rank">
+        <div class="panel-header">
+          <div>
+            <h2 id="rankTitle">本島 19 縣市主要車站排行</h2>
+            <p class="panel-desc">點擊車站列可立即開啟單站儀表板</p>
+          </div>
+          <div class="rank-controls">
+            <select id="rankSortSelect" class="select-input select-input--sm" aria-label="排行排序依據">
+              <option value="ontime_asc">誤點最嚴重優先</option>
+              <option value="ontime_desc">準點率最高優先</option>
+              <option value="avg_desc">平均誤點最長</option>
+              <option value="total_desc">總班次最多</option>
+              <option value="geo">由北至南環島排序</option>
+            </select>
+          </div>
+        </div>
+        <div id="stationRankList" class="rank-list"></div>
+      </article>
+    </section>
+
+    <!-- Time Trend Chart (Adapts to Daily = Hourly, Monthly = Daily, Yearly = Monthly) -->
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 id="trendChartTitle">時間軸準誤點趨勢</h2>
+          <p id="trendChartDesc" class="panel-desc">雙軸呈現準點率變化、平均誤點分鐘數與觀測班次量</p>
+        </div>
+        <span id="trendHint" class="hint-chip"></span>
+      </div>
+      <div id="chartTrend" class="chart-box chart-box--md"></div>
+    </section>
+
+    <!-- Multi-dimensional Analytics Row (Delay Distribution + Train Types) -->
+    <section class="grid-two-col">
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>誤點分鐘數分佈結構</h2>
+            <p class="panel-desc">對照準點（0分）、輕微（1–5分）與中重度延誤區間佔比</p>
+          </div>
+        </div>
+        <div id="chartDelayDist" class="chart-box chart-box--sm"></div>
+        <div id="delayBucketPills" class="bucket-summary"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>各車種準誤點表現評比</h2>
+            <p class="panel-desc">比較新自強（EMU3000）、普悠瑪、太魯閣、自強、莒光與區間車</p>
+          </div>
+        </div>
+        <div id="chartTrainTypes" class="chart-box chart-box--sm"></div>
+      </article>
+    </section>
+
+    <!-- Corridor Heatmap & Direction Comparison -->
+    <section class="grid-two-col">
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>區域 × 時段誤點熱力圖</h2>
+            <p class="panel-desc">找出北部、中部、南部、東部幹線在不同尖離峰時段的延誤熱點</p>
+          </div>
+        </div>
+        <div id="chartHeatmap" class="chart-box chart-box--sm"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>順行 vs 逆行 &amp; 四大區域對比</h2>
+            <p class="panel-desc">檢視北上（順行）與南下（逆行）以及各地區幹線延誤差異</p>
+          </div>
+        </div>
+        <div id="directionCards" class="direction-grid"></div>
+        <div id="chartRegions" class="chart-box chart-box--xs"></div>
+      </article>
+    </section>
+
+    <!-- Full Station Data Table & Top Delayed Trains -->
+    <section class="panel">
+      <div class="panel-header panel-header--wrap">
+        <div class="table-tabs" role="tablist">
+          <button type="button" class="tab-btn active" data-table-tab="stations" role="tab" aria-selected="true">各車站完整統計表</button>
+          <button type="button" class="tab-btn" data-table-tab="trains" role="tab" aria-selected="false">高誤點焦點班次追蹤</button>
+        </div>
+        <div class="table-filters">
+          <select id="regionFilter" class="select-input select-input--sm" aria-label="區域篩選">
+            <option value="all">全部區域</option>
+            <option value="北部">北部幹線</option>
+            <option value="中部">中部幹線</option>
+            <option value="南部">南部幹線</option>
+            <option value="東部">東部幹線</option>
+          </select>
+          <input id="stationSearchInput" class="search-input" type="search" placeholder="搜尋站名、縣市、車次…" aria-label="搜尋車站或車次" />
+        </div>
+      </div>
+
+      <!-- Tab 1: Full Stations Table -->
+      <div id="tabPanelStations" class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>車站</th>
+              <th>縣市 / 路線</th>
+              <th class="num">總班次</th>
+              <th class="num">準點率（≤5分）</th>
+              <th class="num">嚴格準點（0分）</th>
+              <th class="num">平均誤點</th>
+              <th class="num">最大誤點</th>
+              <th class="num">誤點 &gt;5分</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="stationsTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Tab 2: Worst Delayed Trains -->
+      <div id="tabPanelTrains" class="table-wrap hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>車次</th>
+              <th>車種</th>
+              <th>觀測車站</th>
+              <th>開往 / 方向</th>
+              <th class="num">表定時刻</th>
+              <th class="num">誤點分鐘</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="trainsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Zero-API-Impact Architecture & TDX Quota Telemetry Footer Panel -->
+    <section class="panel panel--telemetry">
+      <div class="telemetry-grid">
+        <div>
+          <h3 class="telemetry-title">零 API 增量靜態快取架構</h3>
+          <p class="telemetry-text">
+            本站由 GitHub Actions 定時在後端呼叫 TDX 運輸資料流通服務平臺（每 30 分鐘採集一次全臺即時電子看板，並自動產製單日、單月、單年靜態 JSON 檔部署至 GitHub Pages CDN）。
+            <strong>無論有多少使用者同時瀏覽本網站，皆只讀取靜態 JSON，完全不會增加您的 TDX API 呼叫次數或流量點數。</strong>
+          </p>
+        </div>
+        <div class="quota-box">
+          <div class="quota-header">
+            <span>本月 TDX API 額度監控</span>
+            <span id="quotaPointsText" class="mono">-- / 3.00 點</span>
+          </div>
+          <div class="kpi-bar-track"><div id="quotaBarFill" class="kpi-bar-fill"></div></div>
+          <div class="quota-meta">
+            <span id="quotaCallsText">呼叫：-- 次</span>
+            <span id="quotaBytesText">流量：-- MB</span>
+            <span>前端瀏覽消耗：<strong>0 次</strong></span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p>資料來源：中華民國交通部 <a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 運輸資料流通服務平臺</a>（臺鐵 TRA v3 API）。</p>
+      <p class="footer-note">提醒：即時動態與誤點統計係由 TDX 轉介臺鐵資訊並定時去重彙整，僅供趨勢參考；實際乘車請以各車站現場 TIDS 電子看板與廣播為準。</p>
+    </div>
+  </footer>
+
+  <!-- Station Deep-Dive Modal Drawer -->
+  <div id="stationModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalStationTitle">
+    <div class="modal-card modal-card--wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title-row">
+            <h2 id="modalStationTitle">-- 車站</h2>
+            <span id="modalStationBadge" class="kpi-tag"></span>
+          </div>
+          <p id="modalStationMeta" class="panel-desc"></p>
+        </div>
+        <button type="button" class="modal-close" data-close-modal="stationModal" aria-label="關閉視窗">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalStationKpis" class="modal-kpi-strip"></div>
+        <div class="modal-charts-grid">
+          <div class="modal-chart-panel">
+            <h3>24 小時各時段準點率與平均誤點</h3>
+            <div id="chartStationHourly" class="chart-box chart-box--sm"></div>
+          </div>
+          <div class="modal-chart-panel">
+            <h3>本站各車種準誤點分析</h3>
+            <div id="chartStationTypes" class="chart-box chart-box--sm"></div>
+          </div>
+        </div>
+        <div id="modalStationDirSummary" class="modal-dir-row"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architecture & Setup Guide Modal -->
+  <div id="aboutModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="aboutModalTitle">系統架構、準點標準與 TDX 串接說明</h2>
+        <button type="button" class="modal-close" data-close-modal="aboutModal" aria-label="關閉視窗">✕</button>
+      </div>
+      <div class="modal-body prose-body">
+        <h3>1. 為什麼多人瀏覽不會增加 TDX API 讀取次數？</h3>
+        <p>
+          本專案將資料「採集」與「瀏覽」完全解耦：由 <strong>GitHub Actions</strong> 在每日 05:05–23:35 每 30 分鐘執行一次 Python 腳本呼叫 TDX v3 <code>StationLiveBoard</code> API（單次壓縮請求即涵蓋全臺車站），去重彙整為單日／單月／單年靜態 JSON 檔存入 <code>tdx-data</code> 分支並部署至 GitHub Pages。所有訪客僅從 CDN 讀取靜態檔，對 TDX 的額外消耗永遠為 <strong>0</strong>。
+        </p>
+        <h3>2. 基礎會員（免費 3 點／月）額度估算</h3>
+        <ul>
+          <li>每日 38 次呼叫 × 30 天 ≈ <strong>1,140 次／月</strong>（約 0.76 點，遠低於 4,500 次上限）。</li>
+          <li>開啟 OData <code>$select</code> 與 Gzip 壓縮，全臺 240+ 站每月流量約 130–180 MB（約 0.9–1.2 點）；總計約 <strong>1.6–1.9 點／月</strong>，內建 <code>2.75 點</code> 自動熔斷保護。</li>
+          <li>若將 GitHub Repository Variable <code>COLLECT_SCOPE</code> 設為 <code>major</code>（僅本島 19 縣市主要車站），更可降至 <strong>~0.9 點／月</strong>。</li>
+        </ul>
+        <h3>3. 兩種準點標準說明</h3>
+        <ul>
+          <li><strong>臺鐵官方標準（≤ 5 分鐘）</strong>：延誤 5 分鐘（含）以內即計為準點，與官方公告統計口徑一致。</li>
+          <li><strong>嚴格準點（0 分鐘）</strong>：僅 <code>DelayTime = 0</code> 視為準點，更貼近尖峰通勤族轉乘體感。</li>
+        </ul>
+        <h3>4. 如何啟用您自己的 TDX 即時資料？</h3>
+        <ol>
+          <li>至 GitHub 專案的 <strong>Settings → Secrets and variables → Actions</strong> 新增 <code>TDX_CLIENT_ID</code> 與 <code>TDX_CLIENT_SECRET</code>。</li>
+          <li>在 <strong>Settings → Pages</strong> 將 Source 設為 <strong>GitHub Actions</strong>。</li>
+          <li>至 <strong>Actions → Collect TDX TRA Punctuality Data</strong> 手動點選 <em>Run workflow</em>，約 1 分鐘後本站即自動切換為真實即時累積數據！</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
