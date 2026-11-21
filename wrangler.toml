@@ -1,0 +1,14 @@
+name = "tra-tdx-cron"
+main = "cloudflare-cron/worker.js"
+compatibility_date = "2026-01-01"
+
+[triggers]
+# 全天候每 30 分鐘準點觸發（:00 與 :30，誤差 < 1 秒）
+crons = ["0,30 * * * *"]
+
+[vars]
+GITHUB_OWNER = "ljwwei"
+GITHUB_REPO = "TR"
+WORKFLOW_FILE = "collect-tdx.yml"
+GIT_REF = "main"
+COLLECT_SCOPE = "all"
