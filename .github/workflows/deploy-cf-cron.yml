@@ -1,0 +1,37 @@
+name: Deploy Cloudflare Cron Worker (Optional)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare-cron/**"
+      - ".github/workflows/deploy-cf-cron.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if Cloudflare secrets are configured
+        id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cloudflare secrets not configured; skipping automated Worker deploy (you can paste worker.js directly in Cloudflare Dashboard)."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy Cloudflare Worker via Wrangler
+        if: steps.check.outputs.enabled == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare-cron

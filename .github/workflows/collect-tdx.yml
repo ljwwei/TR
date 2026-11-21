@@ -2,9 +2,9 @@ name: Collect TDX TRA Punctuality Data
 
 on:
   schedule:
-    # 全天候 24 小時每 30 分鐘採集一次（涵蓋深夜末班車、跨日／跨夜班次、清晨首班車與嚴重誤點列車）
-    # 每日 48 次 × 30 天 = 1,440 次/月（約 0.96 點呼叫 + 流量合計約 1.6~2.1 點，仍在基礎會員免費 3 點內）
-    - cron: "5,35 * * * *"
+    # 備援排程：每 2 小時作為保險（平時由 Cloudflare Worker 每 30 分鐘準時透過 workflow_dispatch 觸發；
+    # 若 20 分鐘內 Cloudflare 已採集過，腳本會自動略過，完全不重複消耗 TDX 點數）
+    - cron: "15 */2 * * *"
   workflow_dispatch:
     inputs:
       scope:
@@ -15,6 +15,11 @@ on:
         options:
           - all
           - major
+      trigger_source:
+        description: "觸發來源（手動測試留預設 manual 即可；Cloudflare 會帶入 cloudflare-cron）"
+        required: false
+        default: "manual"
+        type: string
 
 permissions:
   contents: write
@@ -63,6 +68,7 @@ jobs:
           DATA_DIR: data_repo
           COLLECT_SCOPE: ${{ github.event.inputs.scope || vars.COLLECT_SCOPE || 'all' }}
           MAX_MONTHLY_POINTS: ${{ vars.MAX_MONTHLY_POINTS || '2.75' }}
+          TRIGGER_SOURCE: ${{ github.event_name == 'schedule' && 'github-schedule' || github.event.inputs.trigger_source || 'manual' }}
         run: |
           python3 app/scripts/collect_tdx.py
 

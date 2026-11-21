@@ -65,6 +65,24 @@ GitHub Actions (deploy-pages.yml)
 
 ---
 
+## ⏰ Cloudflare Worker 準點排程設定（解決 GitHub Actions cron 延遲）
+
+GitHub Actions 內建 `schedule` 在尖峰時段常延遲 15–45 分鐘甚至略過，本專案已內附免費的 **Cloudflare Worker 準點排程器**（[cloudflare-cron/worker.js](cloudflare-cron/worker.js)），無須綁信用卡即可每 30 分鐘準秒觸發採集（同時保留 GitHub 每 2 小時備援防呆，20 分鐘內不重複扣點）：
+
+1. **建立最小權限 GitHub Token（Fine-grained PAT）**
+   - 前往 GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**。
+   - **Repository access** 選 **Only select repositories → `ljwwei/TR`**。
+   - **Repository permissions** 僅需將 **Actions** 改為 **Read and write**（其餘全部 No access），產生後複製 Token。
+2. **建立 Cloudflare Worker（免裝 CLI，網頁 60 秒完成）**
+   - 登入 [Cloudflare Dashboard](https://dash.cloudflare.com/) → 左側 **Compute (Workers) → Workers & Pages → Create → Create Worker**（命名如 `tra-tdx-cron`）→ **Deploy**。
+   - 點選 **Edit code**，將本專案 `cloudflare-cron/worker.js` 完整內容貼上取代預設程式碼並按 **Deploy**。
+3. **加入 Secret 與 Cron Trigger**
+   - 進入該 Worker 的 **Settings → Variables and Secrets → Add** → Type 選 **Secret**，Name 填 `GITHUB_PAT`，Value 貼上步驟 1 的 Token → **Deploy**。
+   - 進入 **Settings → Trigger Events → Cron Triggers → Add Cron Trigger**，填入 `0,30 * * * *`（每小時 `:00` 與 `:30` 準時執行）→ **Add Trigger**。
+   - 開啟 Worker 網址確認畫面顯示 `"github_pat_configured": true` 即大功告成！
+
+---
+
 ## 📂 補匯入 TDX 歷史資料（選用）
 
 因 TDX 即時 API 不提供過去歷史日期查詢，若您有透過 TDX 會員中心「歷史服務」申請下載過往的臺鐵 CSV / JSON 檔案，可用內建工具批次匯入並自動合併至單日／單月／單年統計：
