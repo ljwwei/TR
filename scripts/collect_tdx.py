@@ -283,23 +283,36 @@ def fetch_station_liveboards(token: str, scope: str, quota: dict) -> tuple[list[
     return items, "all"
 
 
-def resolve_service_date(now: datetime, schedule_time: str) -> str:
-    """處理跨午夜班次歸屬日期，避免 23:55 誤點至 00:05 被拆到兩天。"""
+def resolve_service_date_and_offset(now: datetime, schedule_time: str) -> tuple[str, int]:
+    """回傳 (歸屬營運日期 YYYY-MM-DD, 表定時刻相對現在之分鐘差 scheduled - now)。
+    同時妥善處理跨午夜班次（例如 23:55 誤點至 00:05）。
+    """
     try:
-        hh = int(schedule_time.split(":")[0])
+        parts = schedule_time.split(":")
+        hh, mm = int(parts[0]), int(parts[1])
     except Exception:
-        return now.strftime("%Y-%m-%d")
-    if now.hour <= 2 and hh >= 21:
-        return (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    if now.hour >= 22 and hh <= 2:
-        return (now + timedelta(days=1)).strftime("%Y-%m-%d")
-    return now.strftime("%Y-%m-%d")
+        return now.strftime("%Y-%m-%d"), 0
+
+    candidates: list[tuple[int, datetime]] = []
+    for delta_days in (-1, 0, 1):
+        d = (now + timedelta(days=delta_days)).date()
+        cand = datetime(d.year, d.month, d.day, hh, mm, tzinfo=TZ_TAIPEI)
+        diff_min = int(round((cand - now).total_seconds() / 60.0))
+        candidates.append((diff_min, cand))
+
+    # 挑選時間距離當下最近的日期（避免跨日誤判）
+    diff_min, best_dt = min(candidates, key=lambda x: abs(x[0]))
+    return best_dt.strftime("%Y-%m-%d"), diff_min
 
 
 def merge_observations(state_dir: Path, items: list[dict], stations: dict[str, dict], now: datetime) -> set[str]:
-    """以 (StationID, TrainNo, ScheduleHHMM) 去重寫入每日觀測狀態，回傳受影響的日期集合。"""
+    """以 (StationID, TrainNo, ScheduleHHMM) 去重寫入每日觀測狀態，回傳受影響的日期集合。
+    過濾掉距離發車仍超過 35 分鐘的未來未發車班次（例如深夜看板預先顯示隔日清晨 05:00 首班車），
+    避免尚未發車之 DelayTime=0 造成失真。
+    """
     touched_dates: set[str] = set()
     states_cache: dict[str, dict] = {}
+    skipped_future = 0
 
     for rec in items:
         sid = str(rec.get("StationID") or "").strip()
@@ -309,11 +322,7 @@ def merge_observations(state_dir: Path, items: list[dict], stations: dict[str, d
 
         sch_raw = str(rec.get("ScheduleDepartureTime") or rec.get("ScheduleArrivalTime") or "").strip()
         sch_hm = sch_raw[:5] if len(sch_raw) >= 5 else now.strftime("%H:%M")
-        service_date = resolve_service_date(now, sch_hm)
-
-        if service_date not in states_cache:
-            state_path = state_dir / f"{service_date}.json"
-            states_cache[service_date] = read_json(state_path, {"date": service_date, "records": {}})
+        service_date, diff_min = resolve_service_date_and_offset(now, sch_hm)
 
         raw_delay = rec.get("DelayTime")
         try:
@@ -329,6 +338,17 @@ def merge_observations(state_dir: Path, items: list[dict], stations: dict[str, d
             cancelled = True
         elif isinstance(running_status, str) and running_status.lower() in ("2", "cancel", "cancelled"):
             cancelled = True
+
+        # 僅收錄表定時刻在「過去 90 分鐘 ～ 未來 35 分鐘」內的即時運行班次（或已有明確誤點／停駛紀錄者）
+        if diff_min > 35 and delay == 0 and not cancelled:
+            skipped_future += 1
+            continue
+        if diff_min < -120 and delay == 0 and not cancelled:
+            continue
+
+        if service_date not in states_cache:
+            state_path = state_dir / f"{service_date}.json"
+            states_cache[service_date] = read_json(state_path, {"date": service_date, "records": {}})
 
         direction = rec.get("Direction")
         dir_str = "1" if str(direction) == "1" else "0"
@@ -372,6 +392,33 @@ def merge_observations(state_dir: Path, items: list[dict], stations: dict[str, d
                 "class": "3",
                 "is_major": sid in MAJOR_STATION_IDS,
             }
+
+    if skipped_future:
+        print(f"[INFO] 已略過 {skipped_future} 筆尚未發車之遠期預告班次（>35 分鐘後且未誤點）。")
+
+    # 順便清理既有狀態檔中先前曾誤收的遠期預告班次
+    if state_dir.exists():
+        for fp in state_dir.glob("*.json"):
+            st_doc = states_cache.get(fp.stem) or read_json(fp, None)
+            if not st_doc or not isinstance(st_doc.get("records"), dict):
+                continue
+            cleaned = {}
+            removed = 0
+            for k, r in st_doc["records"].items():
+                try:
+                    upd_dt = datetime.fromisoformat(r.get("upd", ""))
+                    _, dmin = resolve_service_date_and_offset(upd_dt, r.get("sch", "00:00"))
+                    if dmin > 35 and int(r.get("d", 0)) == 0 and not r.get("can", False):
+                        removed += 1
+                        continue
+                except Exception:
+                    pass
+                cleaned[k] = r
+            if removed > 0:
+                st_doc["records"] = cleaned
+                states_cache[fp.stem] = st_doc
+                touched_dates.add(fp.stem)
+                print(f"[INFO] 已清理 {fp.stem} 舊狀態中 {removed} 筆未發車預告紀錄。")
 
     for date_str in touched_dates:
         write_json(state_dir / f"{date_str}.json", states_cache[date_str])

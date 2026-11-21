@@ -127,7 +127,28 @@ function syncSourceUI() {
     badge.className = "status-pill status-pill--live";
     badge.textContent = `TDX 真實即時累積・更新 ${formatIsoShort(manifest?.generated_at)}`;
     switchLabel.textContent = "切換預覽完整年度示範";
-    banner.className = "notice-banner notice-banner--live hidden";
+    const totalDays = manifest?.available?.daily?.length || 0;
+    if (totalDays <= 2) {
+      banner.className = "notice-banner notice-banner--live";
+      banner.innerHTML = `
+        <div>
+          <strong>TDX 真實即時採集已成功連線！</strong>
+          已自動同步全臺 <strong>${manifest?.station_count || 245}</strong> 座車站，目前剛開始累積第 ${totalDays} 天即時數據；系統每 30 分鐘（05:05–23:35）自動更新並累計單日／單月／單年統計。
+        </div>
+        <button type="button" class="notice-action" id="btnBannerPreviewDemo">預覽完整年度示範</button>
+      `;
+      const btn = $("btnBannerPreviewDemo");
+      if (btn) {
+        btn.addEventListener("click", async () => {
+          state.source = "demo";
+          syncSourceUI();
+          populatePeriodOptions();
+          await loadAndRenderCurrent();
+        });
+      }
+    } else {
+      banner.className = "notice-banner notice-banner--live hidden";
+    }
   } else {
     badge.className = "status-pill status-pill--demo";
     badge.textContent = "示範展示資料（尚未連線 TDX）";
@@ -324,23 +345,26 @@ function renderInsights(scopeBlock, rows) {
 
 function renderKpis(scopeBlock, prevBlock, rows) {
   const s = scopeBlock.summary;
-  const rate = calcOntimeRate(s, state.standard);
-  const ontimeCount = calcOntimeCount(s, state.standard);
-  const avgDelay = calcAvgDelay(s);
-  const delayedOnlyAvg = calcDelayedOnlyAvg(s);
-  const grade = getGradeInfo(rate, state.standard);
+  const hasData = s && s.total > 0;
+  const rate = hasData ? calcOntimeRate(s, state.standard) : 0;
+  const ontimeCount = hasData ? calcOntimeCount(s, state.standard) : 0;
+  const avgDelay = hasData ? calcAvgDelay(s) : 0;
+  const delayedOnlyAvg = hasData ? calcDelayedOnlyAvg(s) : 0;
+  const grade = hasData ? getGradeInfo(rate, state.standard) : { label: "累積中", cls: "kpi-tag" };
 
   $("kpiOntimeLabel").textContent =
     state.standard === "strict" ? "整體嚴格準點率（0分）" : "整體準點率（≤ 5分）";
-  $("kpiOntimeRate").textContent = fmtPct(rate);
+  $("kpiOntimeRate").textContent = hasData ? fmtPct(rate) : "--.-%";
   $("kpiOntimeGrade").textContent = grade.label;
   $("kpiOntimeGrade").className = `grade-pill ${grade.cls}`;
-  $("kpiOntimeBar").style.width = `${Math.max(0, Math.min(100, rate))}%`;
-  $("kpiOntimeBar").style.background = getRateColor(rate, state.standard);
-  $("kpiOntimeSub").textContent = `準點 ${fmtNum(ontimeCount)} / 總計 ${fmtNum(s.total)} 班次`;
+  $("kpiOntimeBar").style.width = hasData ? `${Math.max(0, Math.min(100, rate))}%` : "0%";
+  $("kpiOntimeBar").style.background = hasData ? getRateColor(rate, state.standard) : "var(--border)";
+  $("kpiOntimeSub").textContent = hasData
+    ? `準點 ${fmtNum(ontimeCount)} / 總計 ${fmtNum(s.total)} 班次`
+    : "本期範圍尚無觀測班次，可切換「全台所有車站」";
 
   const deltaEl = $("kpiOntimeDelta");
-  if (prevBlock?.summary?.total) {
+  if (hasData && prevBlock?.summary?.total) {
     const prevRate = calcOntimeRate(prevBlock.summary, state.standard);
     const diff = rate - prevRate;
     const sign = diff >= 0 ? "+" : "";
@@ -355,9 +379,11 @@ function renderKpis(scopeBlock, prevBlock, rows) {
   $("kpiTotalSub").textContent =
     s.cancelled > 0 ? `含停駛/取消 ${fmtNum(s.cancelled)} 班次` : "跨站去重之有效車次觀測樣本";
 
-  $("kpiAvgDelay").textContent = fmtMin(avgDelay);
-  $("kpiP90Badge").textContent = `P90 ${s.p90_delay || 0}分`;
-  $("kpiAvgDelaySub").textContent = `僅計誤點班次平均：${fmtMin(delayedOnlyAvg)} 分・最大 ${s.max_delay} 分`;
+  $("kpiAvgDelay").textContent = hasData ? fmtMin(avgDelay) : "--";
+  $("kpiP90Badge").textContent = hasData ? `P90 ${s.p90_delay || 0}分` : "P90 --";
+  $("kpiAvgDelaySub").textContent = hasData
+    ? `僅計誤點班次平均：${fmtMin(delayedOnlyAvg)} 分・最大 ${s.max_delay} 分`
+    : "等待列車運行觀測資料";
 
   // 最佳與最需留意車站（至少 5 班次以上才納入比較，避免極小樣本失真）
   const eligible = rows.filter((r) => r.total >= 5);
@@ -382,6 +408,15 @@ function renderKpis(scopeBlock, prevBlock, rows) {
     $("kpiWorstDelay").textContent = `${fmtMin(worst.avgDelay)}分`;
     $("kpiWorstSub").textContent = `${worst.city}・準點率 ${fmtPct(worstRate)}（點擊詳情）`;
     $("kpiWorstCard").dataset.stationId = worst.id;
+  } else {
+    $("kpiBestStation").textContent = "--";
+    $("kpiBestRate").textContent = "--%";
+    $("kpiBestSub").textContent = "本期尚無車站資料";
+    delete $("kpiBestCard").dataset.stationId;
+    $("kpiWorstStation").textContent = "--";
+    $("kpiWorstDelay").textContent = "--分";
+    $("kpiWorstSub").textContent = "本期尚無車站資料";
+    delete $("kpiWorstCard").dataset.stationId;
   }
 }
 
@@ -483,16 +518,17 @@ function renderDirectionCards(scopeBlock) {
   $("directionCards").innerHTML = entries
     .map((e) => {
       const d = dirs[e.key] || { total: 0, ontime_0: 0, ontime_5: 0, delay_sum: 0 };
-      const rate = calcOntimeRate(d, state.standard);
-      const avg = calcAvgDelay(d);
+      const has = d.total > 0;
+      const rate = has ? calcOntimeRate(d, state.standard) : 0;
+      const avg = has ? calcAvgDelay(d) : 0;
       return `
         <div class="dir-card">
           <div class="dir-card-title">${e.icon} ${e.title}</div>
           <div class="dir-metrics">
-            <span class="dir-rate" style="color:${getRateColor(rate, state.standard)}">${fmtPct(rate)}</span>
-            <span class="mono" style="font-size:0.84rem;color:var(--text-secondary)">平均 ${fmtMin(avg)} 分</span>
+            <span class="dir-rate" style="color:${has ? getRateColor(rate, state.standard) : "var(--text-muted)"}">${has ? fmtPct(rate) : "--.-%"}</span>
+            <span class="mono" style="font-size:0.84rem;color:var(--text-secondary)">${has ? `平均 ${fmtMin(avg)} 分` : "尚無資料"}</span>
           </div>
-          <div class="dir-sub">統計班次：${fmtNum(d.total)} 班・最大誤點 ${d.max_delay || 0} 分</div>
+          <div class="dir-sub">統計班次：${fmtNum(d.total)} 班${has ? `・最大誤點 ${d.max_delay || 0} 分` : ""}</div>
         </div>
       `;
     })

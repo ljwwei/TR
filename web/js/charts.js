@@ -192,11 +192,12 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
   const tc = getThemeColors();
 
   const labels = trend.map((t) => t.label);
-  const rates = trend.map((t) => Number(calcOntimeRate(t, standard).toFixed(2)));
-  const avgDelays = trend.map((t) => Number(calcAvgDelay(t).toFixed(2)));
+  const rates = trend.map((t) => (t.total > 0 ? Number(calcOntimeRate(t, standard).toFixed(2)) : null));
+  const avgDelays = trend.map((t) => (t.total > 0 ? Number(calcAvgDelay(t).toFixed(2)) : null));
   const totals = trend.map((t) => t.total);
 
-  const minRate = Math.max(0, Math.floor((Math.min(...rates, 80) - 6) / 5) * 5);
+  const validRates = rates.filter((v) => v !== null);
+  const minRate = validRates.length ? Math.max(0, Math.floor((Math.min(...validRates, 80) - 6) / 5) * 5) : 0;
 
   chart.setOption(
     {
@@ -209,6 +210,9 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
           if (!items.length) return "";
           const idx = items[0].dataIndex;
           const row = trend[idx];
+          if (!row || !row.total) {
+            return `<div><div style="font-weight:700;margin-bottom:4px">${row?.label || ""}</div><div style="opacity:.75">此時段尚無觀測班次</div></div>`;
+          }
           const clickableHint =
             granularity === "monthly"
               ? `<div style="margin-top:5px;font-size:11px;color:#3B82F6">點擊可切換至 ${row.key} 單日分析 →</div>`
@@ -538,8 +542,8 @@ export function renderRegionsChart(regionsObj, standard) {
     const v = regionsObj?.[r] || { total: 0, ontime_0: 0, ontime_5: 0, delay_sum: 0 };
     return {
       name: `${r}幹線`,
-      rate: Number(calcOntimeRate(v, standard).toFixed(1)),
-      avg: Number(calcAvgDelay(v).toFixed(2)),
+      rate: v.total > 0 ? Number(calcOntimeRate(v, standard).toFixed(1)) : null,
+      avg: v.total > 0 ? Number(calcAvgDelay(v).toFixed(2)) : 0,
       total: v.total,
     };
   });
@@ -555,6 +559,7 @@ export function renderRegionsChart(regionsObj, standard) {
         formatter: (items) => {
           const r = rows[items[0]?.dataIndex];
           if (!r) return "";
+          if (!r.total) return `<strong>${r.name}</strong><br/>本期尚無觀測班次`;
           return `<strong>${r.name}</strong><br/>準點率：${fmtPct(r.rate)}<br/>平均誤點：${fmtMin(r.avg)} 分<br/>班次：${fmtNum(r.total)}`;
         },
       },
@@ -582,7 +587,7 @@ export function renderRegionsChart(regionsObj, standard) {
           backgroundStyle: { color: tc.barSlate, borderRadius: 6 },
           itemStyle: {
             borderRadius: 6,
-            color: (p) => getRateColor(rows[p.dataIndex].rate, standard),
+            color: (p) => (rows[p.dataIndex].rate === null ? tc.barSlate : getRateColor(rows[p.dataIndex].rate, standard)),
           },
           label: {
             show: true,
@@ -590,7 +595,7 @@ export function renderRegionsChart(regionsObj, standard) {
             color: tc.text,
             fontFamily: "JetBrains Mono, monospace",
             fontSize: 11,
-            formatter: (p) => `${rows[p.dataIndex].rate.toFixed(1)}%`,
+            formatter: (p) => (rows[p.dataIndex].rate === null ? "無資料" : `${rows[p.dataIndex].rate.toFixed(1)}%`),
           },
           data: rows.map((r) => r.rate),
         },
