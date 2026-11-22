@@ -852,6 +852,7 @@ def merge_period_files(granularity: str, period_key: str, label: str, child_docs
                     {
                         "key": child_period,
                         "label": f"{mm}月",
+                        "days_covered": int(doc.get("days_covered", 1)),
                         "total": int(cs["total"]),
                         "ontime_0": int(cs["ontime_0"]),
                         "ontime_5": int(cs["ontime_5"]),

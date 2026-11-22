@@ -364,7 +364,12 @@ function syncMapToolsUI() {
 
 function renderHeaderMeta(doc, scopeBlock, rows) {
   const scopeText = state.scope === "major" ? "本島 19 縣市代表站" : `全台 ${rows.length} 座車站`;
-  const daysText = doc.days_covered > 1 ? `・涵蓋 ${doc.days_covered} 天` : "";
+  let daysText = "";
+  if (state.granularity === "monthly") {
+    daysText = doc.days_covered === 1 ? "・涵蓋 1 天（單日抽樣）" : `・涵蓋 ${doc.days_covered} 天`;
+  } else if (doc.days_covered > 1) {
+    daysText = `・涵蓋 ${doc.days_covered} 天`;
+  }
   $("periodMetaInfo").textContent = `${doc.label}・${scopeText}${daysText}`;
   $("rankTitle").textContent =
     state.scope === "major" ? "本島 19 縣市主要車站排行" : `全台車站準誤點排行（共 ${rows.length} 站）`;
@@ -512,9 +517,12 @@ function renderTrendSection(scopeBlock) {
     descEl.textContent = "觀察全天候各時段（含深夜跨日班次與早晚尖峰）準點率與平均延誤變化";
     hintEl.textContent = "24 小時全時段分析（含跨夜班次）";
   } else if (state.granularity === "monthly") {
+    const isSampledSingleDay = (scopeBlock.trend?.length || 0) === 1;
     titleEl.textContent = "單月每日準誤點趨勢分析";
-    descEl.textContent = "追蹤整月波動與異常高峰日期；點擊任意日期資料點可直接下鑽單日分析";
-    hintEl.textContent = "點擊圖表日期可下鑽單日";
+    descEl.textContent = isSampledSingleDay
+      ? "本月目前涵蓋 1 天代表性抽樣實測資料；點擊資料點可直接下鑽該日 24H 分析"
+      : "追蹤整月波動與異常高峰日期；點擊任意日期資料點可直接下鑽單日分析";
+    hintEl.textContent = isSampledSingleDay ? "單日抽樣・點擊可下鑽 24H" : "點擊圖表日期可下鑽單日";
   } else {
     titleEl.textContent = "單年 1–12 月季節性準誤點趨勢";
     descEl.textContent = "觀察全年度各月趨勢與天候季節影響；點擊任意月份資料點可直接下鑽單月分析";

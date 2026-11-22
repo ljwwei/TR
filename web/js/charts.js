@@ -228,9 +228,10 @@ export function renderTrendChart(trend, granularity, standard, onDrillPeriod) {
               : granularity === "yearly"
               ? `<div style="margin-top:5px;font-size:11px;color:#3B82F6">點擊可切換至 ${row.key} 單月分析 →</div>`
               : "";
+          const daysInfo = granularity === "yearly" && row.days_covered ? `（涵蓋 ${row.days_covered} 天）` : "";
           return `
             <div>
-              <div style="font-weight:700;margin-bottom:4px">${row.label}${row.key && row.key !== row.label ? ` (${row.key})` : ""}</div>
+              <div style="font-weight:700;margin-bottom:4px">${row.label}${row.key && row.key !== row.label ? ` (${row.key})` : ""}${daysInfo}</div>
               <div>準點率：<strong>${fmtPct(rates[idx])}</strong></div>
               <div>平均誤點：<strong>${fmtMin(avgDelays[idx])} 分</strong></div>
               <div>統計班次：<strong>${fmtNum(totals[idx])} 班</strong></div>
