@@ -171,8 +171,21 @@ def main() -> int:
     years: set[str] = set()
 
     for date_str, rec_map in sorted(by_date.items()):
+        if len(rec_map) < 100:
+            continue
+        day_path = daily_dir / f"{date_str}.json"
+        if day_path.exists():
+            existing_doc = read_json(day_path, None)
+            ex_total = (
+                existing_doc.get("scope_stats", {}).get("all", {}).get("summary", {}).get("total", 0)
+                if isinstance(existing_doc, dict)
+                else 0
+            )
+            if ex_total >= len(rec_map):
+                print(f"[SKIP] {date_str} 既有資料 ({ex_total}) 已多於匯入筆數 ({len(rec_map)})，予以保留。")
+                continue
         daily_doc = build_daily_aggregate(date_str, rec_map, stations, now)
-        write_json(daily_dir / f"{date_str}.json", daily_doc)
+        write_json(day_path, daily_doc)
         months.add(date_str[:7])
         years.add(date_str[:4])
 
