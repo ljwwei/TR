@@ -1,10 +1,12 @@
 name = "tra-tdx-cron"
 main = "worker.js"
 compatibility_date = "2026-01-01"
+keep_vars = true
 
 [triggers]
-# 全天候每 30 分鐘準點觸發（:00 與 :30，誤差 < 1 秒）
-crons = ["0,30 * * * *"]
+# 台灣 05:00–23:45（UTC 21:00–15:45）每 15 分鐘準點觸發，貼合 TDX 即時看板 10–15 分鐘視窗
+# 台灣 00:00–04:30（UTC 16:00–20:30）每 30 分鐘準點觸發，涵蓋深夜末班車與跨日列車
+crons = ["0,15,30,45 0-15,21-23 * * *", "0,30 16-20 * * *"]
 
 [vars]
 GITHUB_OWNER = "ljwwei"

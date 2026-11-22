@@ -1027,12 +1027,12 @@ def main() -> int:
     prev_manifest = read_json(data_dir / "manifest.json", {})
     prev_quota = prev_manifest.get("quota") or {}
 
-    # 若由 GitHub 內建備援 schedule 觸發，且距離上次採集不到 20 分鐘（表示 Cloudflare 準點排程正常運作），則略過以避免重複扣點
+    # 若由 GitHub 內建備援 schedule 觸發，且距離上次採集不到 12 分鐘（表示 Cloudflare 準點排程正常運作），則略過以避免重複扣點
     if trigger_source == "github-schedule" and prev_manifest.get("generated_at"):
         try:
             last_dt = datetime.fromisoformat(prev_manifest["generated_at"])
             elapsed_min = (now - last_dt).total_seconds() / 60.0
-            if elapsed_min < 20:
+            if elapsed_min < 12:
                 print(
                     f"[SKIP] 距離上次採集僅 {elapsed_min:.1f} 分鐘（Cloudflare 排程運作中），"
                     "略過本次 GitHub 備援排程以節省 TDX 點數。"
