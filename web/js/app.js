@@ -138,7 +138,7 @@ function syncSourceUI() {
       banner.innerHTML = `
         <div>
           <strong>TDX 真實即時採集已成功連線！</strong>
-          已自動同步全臺 <strong>${manifest?.station_count || 245}</strong> 座車站，目前剛開始累積第 ${totalDays} 天即時數據；系統全天候 24 小時每 30 分鐘（含跨夜班次）自動更新並累計單日／單月／單年統計。
+          已自動同步全臺 <strong>${manifest?.station_count || 245}</strong> 座車站，目前剛開始累積第 ${totalDays} 天即時數據；系統由 Cloudflare 準點排程（日間每 15 分鐘、深夜每 30 分鐘）自動更新並累計單日／單月／單年統計。
         </div>
         <button type="button" class="notice-action" id="btnBannerPreviewDemo">預覽完整年度示範</button>
       `;

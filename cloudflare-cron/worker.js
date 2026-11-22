@@ -178,10 +178,11 @@ export default {
         result = { ok: false, error: err.message, at: new Date().toISOString() };
       }
 
+      const ttl = result.ok ? 600 : 15;
       await cache.put(
         lockUrl,
         new Response(JSON.stringify(result), {
-          headers: { "Content-Type": "application/json", "Cache-Control": "max-age=600" },
+          headers: { "Content-Type": "application/json", "Cache-Control": `max-age=${ttl}` },
         })
       );
       return Response.json(result, { status: result.ok ? 200 : 502 });

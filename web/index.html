@@ -359,7 +359,7 @@
         <div>
           <h3 class="telemetry-title">零 API 增量靜態快取架構</h3>
           <p class="telemetry-text">
-            本站由 GitHub Actions 定時在後端呼叫 TDX 運輸資料流通服務平臺（每 30 分鐘採集一次全臺即時電子看板，並自動產製單日、單月、單年靜態 JSON 檔部署至 GitHub Pages CDN）。
+            本站由 Cloudflare Worker 準點排程（05:00–23:45 每 15 分鐘、深夜每 30 分鐘）驅動 GitHub Actions 呼叫 TDX 運輸資料流通服務平臺，去重彙整為單日、單月、單年靜態 JSON 檔部署至 GitHub Pages CDN。
             <strong>無論有多少使用者同時瀏覽本網站，皆只讀取靜態 JSON，完全不會增加您的 TDX API 呼叫次數或流量點數。</strong>
           </p>
         </div>
@@ -426,13 +426,13 @@
       <div class="modal-body prose-body">
         <h3>1. 為什麼多人瀏覽不會增加 TDX API 讀取次數？</h3>
         <p>
-          本專案將資料「採集」與「瀏覽」完全解耦：由 <strong>GitHub Actions</strong> 全天候 24 小時每 30 分鐘（含跨夜班次、深夜末班車與清晨首班車）執行一次 Python 腳本呼叫 TDX v3 <code>StationLiveBoard</code> API（單次壓縮請求即涵蓋全臺車站），去重彙整為單日／單月／單年靜態 JSON 檔存入 <code>tdx-data</code> 分支並部署至 GitHub Pages。所有訪客僅從 CDN 讀取靜態檔，對 TDX 的額外消耗永遠為 <strong>0</strong>。
+          本專案將資料「採集」與「瀏覽」完全解耦：由 <strong>Cloudflare Worker 準點排程</strong>（日間 05:00–23:45 每 15 分鐘、深夜 00:00–04:30 每 30 分鐘，貼合 TDX 10–15 分鐘電子看板視窗並涵蓋跨夜班次）觸發 <strong>GitHub Actions</strong> 呼叫 TDX v3 <code>StationLiveBoard</code> API，去重彙整為單日／單月／單年靜態 JSON 檔存入 <code>tdx-data</code> 分支並部署至 GitHub Pages。所有訪客僅從 CDN 讀取靜態檔，對 TDX 的額外消耗永遠為 <strong>0</strong>。
         </p>
         <h3>2. 基礎會員（免費 3 點／月）額度估算</h3>
         <ul>
-          <li>全天候 24 小時每 30 分鐘採集：每日 48 次 × 30 天 = <strong>1,440 次／月</strong>（僅約 0.96 點，遠低於 4,500 次上限）。</li>
-          <li>開啟 Gzip 壓縮傳輸，全臺 245 站每月流量約 110–170 MB（約 0.7–1.1 點）；合計約 <strong>1.7 – 2.1 點／月</strong>，內建 <code>2.75 點</code> 自動熔斷保護。</li>
-          <li>若將 GitHub Repository Variable <code>COLLECT_SCOPE</code> 設為 <code>major</code>（僅本島 19 縣市主要車站），更可降至 <strong>~1.1 點／月</strong>。</li>
+          <li>日間每 15 分鐘 ＋ 深夜每 30 分鐘：每日 86 次 × 30 天 = <strong>2,580 次／月</strong>（呼叫約 1.72 點）。</li>
+          <li>依實測單次壓縮封包約 55 KB 計算，全臺 245 站每月流量約 135–145 MB（約 0.90–0.96 點）；合計約 <strong>2.6 – 2.7 點／月</strong>，內建 <code>2.75 點</code> 自動熔斷保護，剛好貼合基礎會員免費 3 點額度。</li>
+          <li>若為 TDX 付費銅級以上會員，可於 <code>wrangler.toml</code> 將排程調高至每 5–10 分鐘一次並放寬 <code>MAX_MONTHLY_POINTS</code>。</li>
         </ul>
         <h3>3. 兩種準點標準說明</h3>
         <ul>
