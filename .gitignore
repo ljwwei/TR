@@ -18,3 +18,8 @@ Thumbs.db
 # Local test live data (live data lives in the tdx-data branch on GitHub)
 web/data/live/
 data_tmp/
+
+# Raw TDX historical downloads (import into tdx-data branch instead of committing raw CSVs)
+*.CSV
+*.csv
+e1aa7560-5416-4edb-a019-3237eb76b15f/

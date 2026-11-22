@@ -8,6 +8,7 @@ on:
       - "scripts/generate_demo_data.py"
       - "scripts/stations_catalog.py"
       - "scripts/collect_tdx.py"
+      - "scripts/import_historical.py"
       - ".github/workflows/deploy-pages.yml"
   workflow_call:
   workflow_dispatch:
